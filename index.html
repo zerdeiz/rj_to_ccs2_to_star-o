@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Scroll Video Demo</title>
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #cde8ff;
+      overflow-x: hidden;
+    }
+
+    .stage {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100vh;
+      overflow: hidden;
+      z-index: 1;
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: contain;
+
+      /* wichtig für iOS, damit Wischen trotzdem Page Scroll auslöst */
+      touch-action: pan-y;
+    }
+
+    .spacer {
+      height: 2200px;
+      width: 1px;
+      position: relative;
+      z-index: 0;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="stage">
+    <video
+      id="scrollVid"
+      src="pt_rj_to_ccs2_01_scroll.mp4"
+      playsinline
+      muted
+      preload="auto"
+      webkit-playsinline
+    ></video>
+  </div>
+
+  <div class="spacer" aria-hidden="true"></div>
+
+  <script>
+    const vid = document.getElementById("scrollVid");
+
+    // iOS: erster Frame erzwingen
+    function primeVideo() {
+      // Manche Browser brauchen ein play/pause um sauber zu decoden
+      const p = vid.play();
+      if (p && typeof p.then === "function") {
+        p.then(() => {
+          vid.pause();
+          vid.currentTime = 0;
+        }).catch(() => {
+          // wenn autoplay blockiert ist, reicht oft load + currentTime
+          vid.load();
+          vid.currentTime = 0;
+        });
+      } else {
+        vid.pause();
+        vid.currentTime = 0;
+      }
+    }
+
+    // Scroll to time mapping
+    function updateFromScroll() {
+      if (!isFinite(vid.duration) || vid.duration <= 0) return;
+
+      const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+      const t = (window.scrollY / maxScroll) * vid.duration;
+
+      // iOS Safari ist empfindlich bei zu vielen seeks, daher minimal glätten
+      const clamped = Math.min(vid.duration - 0.001, Math.max(0, t));
+      if (Math.abs(vid.currentTime - clamped) > 0.02) {
+        vid.currentTime = clamped;
+      }
+    }
+
+    // Zuruecksetzen bei Back Forward Cache
+    window.addEventListener("pageshow", () => {
+      window.scrollTo(0, 0);
+      // nach kurzem Tick, damit Layout steht
+      setTimeout(() => {
+        primeVideo();
+        updateFromScroll();
+      }, 0);
+    });
+
+    // Wenn Metadaten da sind, direkt syncen
+    vid.addEventListener("loadedmetadata", () => {
+      vid.currentTime = 0;
+      updateFromScroll();
+    });
+
+    // Scroll listener mit rAF, damit es nicht jittert
+    let ticking = false;
+    window.addEventListener("scroll", () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        updateFromScroll();
+        ticking = false;
+      });
+    }, { passive: true });
+
+    // Start
+    primeVideo();
+  </script>
+</body>
+</html>
